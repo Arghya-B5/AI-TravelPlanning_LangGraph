@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import TypedDict, Annotated
 import operator
@@ -16,7 +17,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 checkpointer = InMemorySaver()
 from langchain_groq import ChatGroq
 
-from tools.tavily_tool import tavily_search
+from mcp_client import tavily_mcp_search
 from tools.flight_tool import search_flights
 from dotenv import load_dotenv
 
@@ -30,7 +31,8 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
     groq_api_key=GROQ_API_KEY,
-    temperature=0.3
+    temperature=0.3,
+    max_tokens=150
 )
 
 # State
@@ -57,7 +59,9 @@ def flight_agent(state: TravelState):
 # Hotel Agent
 def hotel_agent(state: TravelState):
     query = f"Best hotels for {state['user_query']}"
-    hotel_results = tavily_search(query)
+    hotel_results = asyncio.run(
+        tavily_mcp_search(query)
+    )
 
     return {
         "hotel_results": hotel_results,
