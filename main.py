@@ -1,6 +1,3 @@
-# main.py
-import os
-
 import os
 from typing import TypedDict, Annotated
 import operator
@@ -22,13 +19,18 @@ from langchain_groq import ChatGroq
 from tools.tavily_tool import tavily_search
 from tools.flight_tool import search_flights
 from dotenv import load_dotenv
-load_dotenv()
 
-# /DATABASE_URL = os.getenv("DATABASE_URL")
+
+load_dotenv(override=True)
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
 
 # LLM
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile"
+    model="openai/gpt-oss-120b",
+    groq_api_key=GROQ_API_KEY,
+    temperature=0.3
 )
 
 # State
