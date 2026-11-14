@@ -17,7 +17,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 checkpointer = InMemorySaver()
 from langchain_groq import ChatGroq
 
-from mcp_client import tavily_mcp_search
+from mcp_client import (
+    tavily_mcp_search,
+    extract_destination,
+    forecast_mcp_search,
+    weather_mcp_search
+)
+
 from tools.flight_tool import search_flights
 from dotenv import load_dotenv
 
@@ -32,7 +38,7 @@ llm = ChatGroq(
     model="openai/gpt-oss-120b",
     groq_api_key=GROQ_API_KEY,
     temperature=0.3,
-    max_tokens=150
+    max_tokens=1500
 )
 
 # State
@@ -43,6 +49,7 @@ class TravelState(TypedDict):
     hotel_results: str
     itinerary: str
     llm_calls: int
+    weather_results: str
 
 # Flight Agent
 def flight_agent(state: TravelState):
@@ -71,6 +78,36 @@ def hotel_agent(state: TravelState):
        
     }
 
+
+
+def weather_agent(state: TravelState):
+
+    city = extract_destination(state["user_query"])
+
+    weather_data = asyncio.run(
+        weather_mcp_search(city)
+    )
+
+    forecast_data = asyncio.run(
+        forecast_mcp_search(city)
+    )
+
+    return {
+        "weather_results": f"""
+        Current Weather:
+        {weather_data}
+
+        Forecast:
+        {forecast_data}
+        """,
+        "messages": [
+            AIMessage(
+                content="Weather information fetched"
+            )
+        ]
+    }
+
+
 # Itinerary Agent
 def itinerary_agent(state: TravelState):
 
@@ -84,6 +121,10 @@ def itinerary_agent(state: TravelState):
 
     Hotel Results:
     {state['hotel_results']}
+
+    Weather Information:
+    {state['weather_results']}
+    
     """
 
     response = llm.invoke([
@@ -99,44 +140,21 @@ def itinerary_agent(state: TravelState):
         "llm_calls": state.get("llm_calls", 0) + 1
     }
 
-# Final Response Agent
-def final_agent(state: TravelState):
-
-    final_prompt = f"""
-    Generate final travel response.
-
-    Flights:
-    {state['flight_results']}
-
-    Hotels:
-    {state['hotel_results']}
-
-    Itinerary:
-    {state['itinerary']}
-    """
-
-    response = llm.invoke([
-        HumanMessage(content=final_prompt)
-    ])
-
-    return {
-        "messages": [response],
-        "llm_calls": state.get("llm_calls", 0) + 1
-    }
 
 
 graph = StateGraph(TravelState)
 
 graph.add_node("flight_agent", flight_agent)
 graph.add_node("hotel_agent", hotel_agent)
+graph.add_node("weather_agent", weather_agent)
 graph.add_node("itinerary_agent", itinerary_agent)
-graph.add_node("final_agent", final_agent)
+
 
 graph.add_edge(START, "flight_agent")
 graph.add_edge("flight_agent", "hotel_agent")
-graph.add_edge("hotel_agent", "itinerary_agent")
-graph.add_edge("itinerary_agent", "final_agent")
-graph.add_edge("final_agent", END)
+graph.add_edge("hotel_agent", "weather_agent")
+graph.add_edge("weather_agent", "itinerary_agent")
+graph.add_edge("itinerary_agent", END)
 
 
 # Persistent connection so both CLI and Streamlit can share the compiled app
